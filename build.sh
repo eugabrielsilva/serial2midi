@@ -95,18 +95,8 @@ if [[ "${OS_NAME}" == "Darwin" ]]; then
         xattr -cr "${APP_PATH}" || true
     fi
 
-    cat > "${ROOT_DIR}/dist/run_serial2midi_debug.sh" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-LOG_FILE="\${HOME}/serial2midi_boot.log"
-"${BIN_PATH}" > "\${LOG_FILE}" 2>&1 || true
-echo "Debug log written to: \${LOG_FILE}"
-EOF
-    chmod +x "${ROOT_DIR}/dist/run_serial2midi_debug.sh"
-
     echo
     echo "Build completed: ${APP_PATH}"
-    echo "If the app closes unexpectedly, run: ${ROOT_DIR}/dist/run_serial2midi_debug.sh"
 else
     echo "Building single-file executable..."
     "${PYTHON_BIN}" -m PyInstaller \

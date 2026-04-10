@@ -363,25 +363,6 @@ async def findDevices(probe_identity=True):
         yield device_info
 
 
-async def listDevices():
-    print("# Devices")
-    i = 0
-
-    async for port_info in findDevices():
-        print(" ")
-        for key, value in port_info.items():
-            if key == 'midi_identity' and value is not None:
-                for sub_key, sub_value in value.items():
-                    print("device_info.{}.{}: {}".format(key, sub_key, sub_value))
-                continue
-
-            print("device_info.{}: {}".format(key, value))
-        i += 1
-
-    if i == 0:
-        print("No devices found :/")
-
-
 class Serial2MidiGUI:
     def __init__(self):
         try:
@@ -652,47 +633,13 @@ def write_crash_log(exc):
     return crash_path
 
 async def main():
-    import argparse
-
-    parser = argparse.ArgumentParser(prog='serial2midi', description='Convert a USB Serial device to a Midi device', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--device', dest='device_path', default=None,
-                        help='Serial device path, for example /dev/ttyUSB0 (required in --cli mode)')
-    parser.add_argument('--baud-rate', dest='baud_rate', default=115200,
-                        help='Baud rate of serial device')
-    parser.add_argument('--sleep-interval', dest='sleep_interval', default=0.3,
-                        help='How many seconds we wait between looking for reconnected device. Float is possible.')
-
-    parser.add_argument('--list', default=False, action="store_true", help='List available devices')
-    parser.add_argument('--gui', default=False, action="store_true", help='Open graphical interface')
-    parser.add_argument('--cli', default=False, action="store_true", help='Force terminal mode instead of GUI')
-    args = parser.parse_args()
-
-    if args.list:
-        await listDevices()
+    try:
+        gui = Serial2MidiGUI()
+        gui.run()
         return 0
-
-    if args.gui or not args.cli:
-        try:
-            gui = Serial2MidiGUI()
-            gui.run()
-            return 0
-        except Exception as exc:
-            print("Could not start GUI mode:", exc)
-            print("Try running in CLI mode with --cli")
-            return 1
-
-    if args.device_path is None:
-        print("--device is required in --cli mode. Use --list to discover available devices.")
+    except Exception as exc:
+        print("Could not start GUI mode:", exc)
         return 1
-
-    serial_to_midi = Serial2Midi(args.baud_rate, args.sleep_interval, args.device_path)
-
-    
-    import signal
-    for sig in ('TERM', 'HUP', 'INT'):
-        signal.signal(getattr(signal, 'SIG'+sig), lambda signo, _frame: serial_to_midi.stop());
-
-    await serial_to_midi.run()
 
 if __name__ == '__main__':
     try:
