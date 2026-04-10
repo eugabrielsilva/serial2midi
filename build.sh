@@ -37,9 +37,41 @@ COMMON_ARGS=(
     --noconfirm
     --clean
     --name serial2midi
-    --collect-all
-    PySide6
+    # Only the Qt modules the app actually uses
+    --hidden-import=PySide6.QtCore
+    --hidden-import=PySide6.QtWidgets
+    --hidden-import=PySide6.QtGui
     --hidden-import=serial.tools.list_ports
+    # Exclude heavy Qt modules not used by this app
+    --exclude-module=PySide6.QtWebEngine
+    --exclude-module=PySide6.QtWebEngineCore
+    --exclude-module=PySide6.QtWebEngineWidgets
+    --exclude-module=PySide6.QtMultimedia
+    --exclude-module=PySide6.QtMultimediaWidgets
+    --exclude-module=PySide6.Qt3DCore
+    --exclude-module=PySide6.Qt3DRender
+    --exclude-module=PySide6.Qt3DInput
+    --exclude-module=PySide6.Qt3DLogic
+    --exclude-module=PySide6.Qt3DAnimation
+    --exclude-module=PySide6.Qt3DExtras
+    --exclude-module=PySide6.QtCharts
+    --exclude-module=PySide6.QtDataVisualization
+    --exclude-module=PySide6.QtLocation
+    --exclude-module=PySide6.QtPositioning
+    --exclude-module=PySide6.QtRemoteObjects
+    --exclude-module=PySide6.QtSensors
+    --exclude-module=PySide6.QtSerialBus
+    --exclude-module=PySide6.QtSpatialAudio
+    --exclude-module=PySide6.QtVirtualKeyboard
+    # Exclude unused Python stdlib modules
+    --exclude-module=unittest
+    --exclude-module=email
+    --exclude-module=html
+    --exclude-module=http
+    --exclude-module=xml
+    --exclude-module=xmlrpc
+    --exclude-module=tkinter
+    --exclude-module=_tkinter
     "${ROOT_DIR}/main.py"
 )
 

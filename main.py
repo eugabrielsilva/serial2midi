@@ -385,7 +385,7 @@ class Serial2MidiGUI:
 
         self.QtCore = QtCore
         self.QtWidgets = QtWidgets
-        self.config_path = "serial2midi_config.json"
+        self.config_path = os.path.join(os.path.expanduser("~"), ".serial2midi_config.json")
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
         self.window = QtWidgets.QWidget()
         self.window.setWindowTitle("Serial2MIDI")
@@ -517,6 +517,8 @@ class Serial2MidiGUI:
                 break
             if event_type == "devices":
                 self._update_device_selector(payload)
+            elif event_type == "stopped":
+                self._set_stopped_state()
 
     def _read_and_validate_config(self):
         name = self.name_input.text().strip() or "Serial2MIDI"
@@ -554,7 +556,7 @@ class Serial2MidiGUI:
                 self.log_queue.put(traceback.format_exc())
             finally:
                 self.log_queue.put("Bridge stopped")
-                self.root.after(0, self._set_stopped_state)
+                self.event_queue.put(("stopped", None))
 
         self.bridge_thread = threading.Thread(target=runner, daemon=True)
         self.bridge_thread.start()
