@@ -1,6 +1,5 @@
 #!/usr/bin/python
 
-import rtmidi
 import serial
 import serial.tools.list_ports
 import time
@@ -125,6 +124,13 @@ class Serial2Midi():
         
 
     async def run(self):
+        try:
+            import rtmidi
+        except Exception as exc:
+            raise RuntimeError(
+                "python-rtmidi could not be loaded. Rebuild the app in the target macOS environment."
+            ) from exc
+
         virtualMidiInput = rtmidi.MidiIn()
         virtualMidiInput.set_client_name(self.name)
         virtualMidiInput.open_virtual_port(self.name)
@@ -606,6 +612,15 @@ class Serial2MidiGUI:
     def run(self):
         self.root.mainloop()
 
+
+def write_crash_log(exc):
+    crash_path = os.path.join(os.path.expanduser("~"), "serial2midi_crash.log")
+    with open(crash_path, "w", encoding="utf-8") as crash_file:
+        crash_file.write("Serial2MIDI fatal error\n\n")
+        crash_file.write(str(exc) + "\n\n")
+        crash_file.write(traceback.format_exc())
+    return crash_path
+
 async def main():
     import argparse
 
@@ -647,4 +662,22 @@ async def main():
     await serial_to_midi.run()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as exc:
+        crash_log = write_crash_log(exc)
+        print("Fatal error. See crash log:", crash_log)
+        try:
+            from tkinter import messagebox
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror(
+                "Serial2MIDI",
+                "Serial2MIDI crashed.\n\n"
+                + "Crash log written to:\n"
+                + crash_log,
+            )
+            root.destroy()
+        except Exception:
+            pass
+        raise
