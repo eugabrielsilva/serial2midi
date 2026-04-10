@@ -71,12 +71,21 @@ The script will:
 - set `MACOSX_DEPLOYMENT_TARGET=11.0` automatically on macOS (if not already defined)
 - build `dist/serial2midi.app` by default on macOS
 - build `dist/serial2midi` (single file) on Linux
+- apply ad-hoc signing and remove quarantine attributes on macOS
 
 To override the macOS deployment target explicitly:
 
 ```bash
 MACOSX_DEPLOYMENT_TARGET=16.0 ./build.sh
 ```
+
+If the macOS app still closes unexpectedly, run the generated debug launcher:
+
+```bash
+./dist/run_serial2midi_debug.sh
+```
+
+It writes boot output to `~/serial2midi_boot.log`.
 
 # Usage
 ```
