@@ -29,6 +29,7 @@ class LogLevel(Enum):
 #LOG_LEVELS = [LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR, LogLevel.DEBUG]
 LOG_LEVELS = [LogLevel.INFO]
 LOG_HOOKS = []
+MIDI_PORT_NAME = "Serial2MIDI"
 
 def logger(level: LogLevel):
     if level not in LOG_LEVELS:
@@ -110,8 +111,8 @@ def serial_set_callback(serial, cb, on_exception):
     return stop
 
 class Serial2Midi():
-    def __init__(self, name, baud_rate, sleep_interval, device_path):
-        self.name = name
+    def __init__(self, baud_rate, sleep_interval, device_path):
+        self.name = MIDI_PORT_NAME
         self.sleep_interval = sleep_interval
         self.baud_rate = baud_rate
         self.start_time = time.time()
@@ -129,11 +130,18 @@ class Serial2Midi():
                 "python-rtmidi could not be loaded. Rebuild the app in the target macOS environment."
             ) from exc
 
+        def safe_set_client_name(midi_client, name):
+            # Some backends (for example CoreMIDI) do not support changing client names.
+            try:
+                midi_client.set_client_name(name)
+            except NotImplementedError:
+                warn("MIDI backend does not support changing client name; using default backend name")
+
         virtualMidiInput = rtmidi.MidiIn()
-        virtualMidiInput.set_client_name(self.name)
+        safe_set_client_name(virtualMidiInput, self.name)
         virtualMidiInput.open_virtual_port(self.name)
         virtualMidiOutput = rtmidi.MidiOut()
-        virtualMidiOutput.set_client_name(self.name)
+        safe_set_client_name(virtualMidiOutput, self.name)
         virtualMidiOutput.open_virtual_port(self.name)
 
         found_device = True
@@ -402,7 +410,6 @@ class Serial2MidiGUI:
         self.selected_device_value = "Select a device"
         self._closed = False
 
-        self.name_value = "Serial2MIDI"
         self.baud_rate_value = "115200"
 
         self._load_config()
@@ -423,7 +430,6 @@ class Serial2MidiGUI:
         try:
             with open(self.config_path, "r", encoding="utf-8") as config_file:
                 config = json.load(config_file)
-            self.name_value = str(config.get("name", "Serial2MIDI"))
             saved_baud_rate = str(config.get("baud_rate", "115200"))
             if saved_baud_rate not in self.baud_rate_options:
                 self.baud_rate_options.append(saved_baud_rate)
@@ -433,12 +439,10 @@ class Serial2MidiGUI:
             pass
 
     def _save_config(self):
-        name_value = self.name_input.text().strip() if hasattr(self, "name_input") else self.name_value
         baud_rate_value = self.baud_rate_combo.currentText().strip() if hasattr(self, "baud_rate_combo") else self.baud_rate_value
         selected_device_value = self.device_combo.currentText().strip() if hasattr(self, "device_combo") else self.selected_device_value
 
         config = {
-            "name": name_value or "Serial2MIDI",
             "baud_rate": baud_rate_value or "115200",
             "selected_device": selected_device_value or "Select a device"
         }
@@ -457,8 +461,8 @@ class Serial2MidiGUI:
         config_layout = QtWidgets.QGridLayout(config_group)
 
         config_layout.addWidget(QtWidgets.QLabel("MIDI Name"), 0, 0)
-        self.name_input = QtWidgets.QLineEdit(self.name_value)
-        config_layout.addWidget(self.name_input, 0, 1)
+        fixed_name = QtWidgets.QLabel(MIDI_PORT_NAME)
+        config_layout.addWidget(fixed_name, 0, 1)
 
         config_layout.addWidget(QtWidgets.QLabel("Baud Rate"), 0, 2)
         self.baud_rate_combo = QtWidgets.QComboBox()
@@ -521,7 +525,6 @@ class Serial2MidiGUI:
                 self._set_stopped_state()
 
     def _read_and_validate_config(self):
-        name = self.name_input.text().strip() or "Serial2MIDI"
         selected = self.device_combo.currentText().strip()
         if selected not in self.device_options or self.device_options[selected] is None:
             raise ValueError("Please select a device")
@@ -532,7 +535,7 @@ class Serial2MidiGUI:
         except ValueError:
             raise ValueError("Baud rate must be an integer")
 
-        return name, baud_rate, self.gui_sleep_interval, device_path
+        return baud_rate, self.gui_sleep_interval, device_path
 
     def start_bridge(self):
         if self.bridge_thread is not None and self.bridge_thread.is_alive():
@@ -540,14 +543,14 @@ class Serial2MidiGUI:
             return
 
         try:
-            name, baud_rate, sleep_interval, device_path = self._read_and_validate_config()
+            baud_rate, sleep_interval, device_path = self._read_and_validate_config()
         except ValueError as exc:
             self.log_queue.put("[ERROR] " + str(exc))
             return
 
         self._save_config()
 
-        self.serial_to_midi = Serial2Midi(name, baud_rate, sleep_interval, device_path)
+        self.serial_to_midi = Serial2Midi(baud_rate, sleep_interval, device_path)
 
         def runner():
             try:
@@ -653,8 +656,6 @@ async def main():
     import argparse
 
     parser = argparse.ArgumentParser(prog='serial2midi', description='Convert a USB Serial device to a Midi device', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--name', dest='name', default='Serial2MIDI',
-                        help='Name of the virtual midi device')
     parser.add_argument('--device', dest='device_path', default=None,
                         help='Serial device path, for example /dev/ttyUSB0 (required in --cli mode)')
     parser.add_argument('--baud-rate', dest='baud_rate', default=115200,
@@ -685,7 +686,7 @@ async def main():
         print("--device is required in --cli mode. Use --list to discover available devices.")
         return 1
 
-    serial_to_midi = Serial2Midi(args.name, args.baud_rate, args.sleep_interval, args.device_path)
+    serial_to_midi = Serial2Midi(args.baud_rate, args.sleep_interval, args.device_path)
 
     
     import signal
