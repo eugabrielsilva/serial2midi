@@ -56,9 +56,9 @@ There is a PKGBUILD in the [AUR](https://aur.archlinux.org/packages/serial2midi-
 
 The `dependencies.txt` file also includes PyInstaller, so the same install step works whether you are using a virtual environment or a system/global Python environment.
 
-## Build Single Executable
+## Build
 
-You can build a single-file executable with PyInstaller:
+Build with PyInstaller:
 
 ```bash
 ./build.sh
@@ -69,7 +69,8 @@ The script will:
 - fall back to `./venv/bin/python` or `python3`
 - install PyInstaller automatically if it is missing
 - set `MACOSX_DEPLOYMENT_TARGET=11.0` automatically on macOS (if not already defined)
-- generate the executable at `dist/serial2midi`
+- build `dist/serial2midi.app` by default on macOS
+- build `dist/serial2midi` (single file) on Linux
 
 To override the macOS deployment target explicitly:
 

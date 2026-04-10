@@ -17,7 +17,9 @@ fi
 
 echo "Using Python: ${PYTHON_BIN}"
 
-if [[ "$(uname -s)" == "Darwin" ]]; then
+OS_NAME="$(uname -s)"
+
+if [[ "${OS_NAME}" == "Darwin" ]]; then
     if [[ -z "${MACOSX_DEPLOYMENT_TARGET:-}" ]]; then
         export MACOSX_DEPLOYMENT_TARGET="11.0"
     fi
@@ -31,15 +33,31 @@ fi
 
 rm -rf "${ROOT_DIR}/build" "${ROOT_DIR}/dist" "${ROOT_DIR}/serial2midi.spec"
 
-"${PYTHON_BIN}" -m PyInstaller \
-    --noconfirm \
-    --clean \
-    --onefile \
-    --name serial2midi \
-    --hidden-import=tkinter \
-    --hidden-import=_tkinter \
-    --hidden-import=serial.tools.list_ports \
+COMMON_ARGS=(
+    --noconfirm
+    --clean
+    --name serial2midi
+    --hidden-import=tkinter
+    --hidden-import=_tkinter
+    --hidden-import=serial.tools.list_ports
     "${ROOT_DIR}/main.py"
+)
 
-echo
-echo "Build completed: ${ROOT_DIR}/dist/serial2midi"
+if [[ "${OS_NAME}" == "Darwin" ]]; then
+    echo "Building macOS app bundle (.app)..."
+    "${PYTHON_BIN}" -m PyInstaller \
+        --windowed \
+        --onedir \
+        "${COMMON_ARGS[@]}"
+
+    echo
+    echo "Build completed: ${ROOT_DIR}/dist/serial2midi.app"
+else
+    echo "Building single-file executable..."
+    "${PYTHON_BIN}" -m PyInstaller \
+        --onefile \
+        "${COMMON_ARGS[@]}"
+
+    echo
+    echo "Build completed: ${ROOT_DIR}/dist/serial2midi"
+fi
