@@ -17,6 +17,13 @@ fi
 
 echo "Using Python: ${PYTHON_BIN}"
 
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    if [[ -z "${MACOSX_DEPLOYMENT_TARGET:-}" ]]; then
+        export MACOSX_DEPLOYMENT_TARGET="11.0"
+    fi
+    echo "Using MACOSX_DEPLOYMENT_TARGET: ${MACOSX_DEPLOYMENT_TARGET}"
+fi
+
 if ! "${PYTHON_BIN}" -m PyInstaller --version >/dev/null 2>&1; then
     echo "PyInstaller not found. Installing it into the active environment..."
     "${PYTHON_BIN}" -m pip install pyinstaller

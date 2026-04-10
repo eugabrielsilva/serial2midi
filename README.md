@@ -68,7 +68,14 @@ The script will:
 - use the active virtual environment when available
 - fall back to `./venv/bin/python` or `python3`
 - install PyInstaller automatically if it is missing
+- set `MACOSX_DEPLOYMENT_TARGET=11.0` automatically on macOS (if not already defined)
 - generate the executable at `dist/serial2midi`
+
+To override the macOS deployment target explicitly:
+
+```bash
+MACOSX_DEPLOYMENT_TARGET=16.0 ./build.sh
+```
 
 # Usage
 ```
