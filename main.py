@@ -26,8 +26,7 @@ class LogLevel(Enum):
     DEBUG = 4,
     VERBOSE = 5
 
-#LOG_LEVELS = [LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR, LogLevel.DEBUG]
-LOG_LEVELS = [LogLevel.INFO]
+LOG_LEVELS = [LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR]
 LOG_HOOKS = []
 MIDI_PORT_NAME = "Serial2MIDI"
 
@@ -320,7 +319,7 @@ def sysexIdentityRequest(device, timeout=4):
             return identity
     return False
 
-async def findDevices():
+async def findDevices(probe_identity=True):
     import serial.tools.list_ports
 
     async def task(port_info):
@@ -341,22 +340,21 @@ async def findDevices():
             })
 
         })
-        #identity = sysexIdentityRequest(port_info.device)
-        
-        identity = False
 
-        try:
-            identity = await asyncio.to_thread(sysexIdentityRequest, port_info.device)
-        except Exception as e:
-            print("\nError in sysexIdentityRequest():\n {}".format(traceback.format_exc()))
+        if probe_identity:
+            identity = False
+            try:
+                identity = await asyncio.to_thread(sysexIdentityRequest, port_info.device)
+            except Exception as e:
+                print("\nError in sysexIdentityRequest():\n {}".format(traceback.format_exc()))
 
-        if identity is not False:
-            device_info.midi_identity = dotdict({
-                'manufacturer': identity['manufacturer'],
-                'family_code': identity['family_code'],
-                'model_number': identity['model_number'],
-                'version': identity['version']
-            })
+            if identity is not False:
+                device_info.midi_identity = dotdict({
+                    'manufacturer': identity['manufacturer'],
+                    'family_code': identity['family_code'],
+                    'model_number': identity['model_number'],
+                    'version': identity['version']
+                })
         return device_info
 
     ports = serial.tools.list_ports.comports()
@@ -589,7 +587,7 @@ class Serial2MidiGUI:
 
         async def gather_devices():
             devices = []
-            async for port_info in findDevices():
+            async for port_info in findDevices(probe_identity=False):
                 devices.append(port_info)
             return devices
 
@@ -606,7 +604,8 @@ class Serial2MidiGUI:
 
     def _update_device_selector(self, devices):
         auto_label = "Select a device"
-        previous_selection = self.device_combo.currentText().strip() or self.selected_device_value or auto_label
+        current_text = self.device_combo.currentText().strip()
+        previous_selection = (current_text if current_text and current_text != auto_label else None) or self.selected_device_value or auto_label
         options = {auto_label: None}
         values = [auto_label]
 
