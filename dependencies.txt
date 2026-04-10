@@ -1,3 +1,4 @@
 python-rtmidi
 pyserial
 pyinstaller
+pyside6

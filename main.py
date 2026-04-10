@@ -11,8 +11,6 @@ import os
 from enum import Enum
 import asyncio
 import queue
-import tkinter as tk
-from tkinter import ttk
 
 MIDI_SYSEX = 0xF0
 MIDI_SYSEX_TYPE_NON_REALTIME = 0x7E
@@ -380,29 +378,41 @@ async def listDevices():
 
 class Serial2MidiGUI:
     def __init__(self):
+        try:
+            from PySide6 import QtCore, QtWidgets
+        except Exception as exc:
+            raise RuntimeError("PySide6 is required for GUI mode") from exc
+
+        self.QtCore = QtCore
+        self.QtWidgets = QtWidgets
         self.config_path = "serial2midi_config.json"
-        self.root = tk.Tk()
-        self.root.title("Serial2MIDI")
-        self.root.geometry("820x560")
+        self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
+        self.window = QtWidgets.QWidget()
+        self.window.setWindowTitle("Serial2MIDI")
+        self.window.resize(860, 560)
 
         self.log_queue = queue.Queue()
+        self.event_queue = queue.Queue()
         self.serial_to_midi = None
         self.bridge_thread = None
         self.list_thread = None
         self.device_options = {}
         self.baud_rate_options = ["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"]
         self.gui_sleep_interval = 0.3
+        self.selected_device_value = "Select a device"
+        self._closed = False
 
-        self.name_var = tk.StringVar(value="Serial2MIDI")
-        self.baud_rate_var = tk.StringVar(value="115200")
-        self.selected_device_var = tk.StringVar(value="Select a device")
-        self.status_var = tk.StringVar(value="Stopped")
+        self.name_value = "Serial2MIDI"
+        self.baud_rate_value = "115200"
 
         self._load_config()
 
         self._build_ui()
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
-        self.root.after(100, self._drain_log_queue)
+        self.app.aboutToQuit.connect(self.on_close)
+
+        self.timer = QtCore.QTimer(self.window)
+        self.timer.timeout.connect(self._drain_queues)
+        self.timer.start(100)
 
         self.log_hook = lambda message: self.log_queue.put(message)
         LOG_HOOKS.append(self.log_hook)
@@ -413,20 +423,24 @@ class Serial2MidiGUI:
         try:
             with open(self.config_path, "r", encoding="utf-8") as config_file:
                 config = json.load(config_file)
-            self.name_var.set(str(config.get("name", "Serial2MIDI")))
+            self.name_value = str(config.get("name", "Serial2MIDI"))
             saved_baud_rate = str(config.get("baud_rate", "115200"))
             if saved_baud_rate not in self.baud_rate_options:
                 self.baud_rate_options.append(saved_baud_rate)
-            self.baud_rate_var.set(saved_baud_rate)
-            self.selected_device_var.set(str(config.get("selected_device", "Select a device") or "Select a device"))
+            self.baud_rate_value = saved_baud_rate
+            self.selected_device_value = str(config.get("selected_device", "Select a device") or "Select a device")
         except Exception:
             pass
 
     def _save_config(self):
+        name_value = self.name_input.text().strip() if hasattr(self, "name_input") else self.name_value
+        baud_rate_value = self.baud_rate_combo.currentText().strip() if hasattr(self, "baud_rate_combo") else self.baud_rate_value
+        selected_device_value = self.device_combo.currentText().strip() if hasattr(self, "device_combo") else self.selected_device_value
+
         config = {
-            "name": self.name_var.get().strip() or "Serial2MIDI",
-            "baud_rate": self.baud_rate_var.get().strip() or "115200",
-            "selected_device": self.selected_device_var.get().strip() or "Select a device"
+            "name": name_value or "Serial2MIDI",
+            "baud_rate": baud_rate_value or "115200",
+            "selected_device": selected_device_value or "Select a device"
         }
         try:
             with open(self.config_path, "w", encoding="utf-8") as config_file:
@@ -435,76 +449,84 @@ class Serial2MidiGUI:
             self.log_queue.put("[WARN] Could not save settings")
 
     def _build_ui(self):
-        frame = ttk.Frame(self.root, padding=12)
-        frame.pack(fill=tk.BOTH, expand=True)
+        QtWidgets = self.QtWidgets
 
-        config = ttk.LabelFrame(frame, text="Configuration", padding=10)
-        config.pack(fill=tk.X)
+        main_layout = QtWidgets.QVBoxLayout(self.window)
 
-        ttk.Label(config, text="MIDI Name").grid(row=0, column=0, sticky=tk.W, padx=4, pady=4)
-        ttk.Entry(config, textvariable=self.name_var, width=26).grid(row=0, column=1, sticky=tk.W, padx=4, pady=4)
+        config_group = QtWidgets.QGroupBox("Configuration")
+        config_layout = QtWidgets.QGridLayout(config_group)
 
-        ttk.Label(config, text="Baud Rate").grid(row=0, column=2, sticky=tk.W, padx=4, pady=4)
-        self.baud_rate_combo = ttk.Combobox(config, textvariable=self.baud_rate_var, state="readonly", width=26)
-        self.baud_rate_combo["values"] = self.baud_rate_options
-        self.baud_rate_combo.grid(row=0, column=3, sticky=tk.W, padx=4, pady=4)
+        config_layout.addWidget(QtWidgets.QLabel("MIDI Name"), 0, 0)
+        self.name_input = QtWidgets.QLineEdit(self.name_value)
+        config_layout.addWidget(self.name_input, 0, 1)
 
-        ttk.Label(config, text="Device").grid(row=1, column=0, sticky=tk.W, padx=4, pady=4)
-        self.device_combo = ttk.Combobox(config, textvariable=self.selected_device_var, state="readonly", width=64)
-        self.device_combo["values"] = ["Select a device"]
-        self.device_combo.grid(row=1, column=1, columnspan=3, sticky=tk.W, padx=4, pady=4)
+        config_layout.addWidget(QtWidgets.QLabel("Baud Rate"), 0, 2)
+        self.baud_rate_combo = QtWidgets.QComboBox()
+        self.baud_rate_combo.addItems(self.baud_rate_options)
+        self.baud_rate_combo.setCurrentText(self.baud_rate_value)
+        config_layout.addWidget(self.baud_rate_combo, 0, 3)
 
-        actions = ttk.Frame(frame, padding=(0, 10, 0, 10))
-        actions.pack(fill=tk.X)
+        config_layout.addWidget(QtWidgets.QLabel("Device"), 1, 0)
+        self.device_combo = QtWidgets.QComboBox()
+        self.device_combo.addItem("Select a device")
+        self.device_combo.setCurrentText(self.selected_device_value)
+        config_layout.addWidget(self.device_combo, 1, 1, 1, 3)
 
-        self.start_button = ttk.Button(actions, text="Start Bridge", command=self.start_bridge)
-        self.start_button.pack(side=tk.LEFT, padx=(0, 8))
+        main_layout.addWidget(config_group)
 
-        self.stop_button = ttk.Button(actions, text="Stop Bridge", command=self.stop_bridge, state=tk.DISABLED)
-        self.stop_button.pack(side=tk.LEFT, padx=(0, 8))
+        actions_layout = QtWidgets.QHBoxLayout()
+        self.start_button = QtWidgets.QPushButton("Start Bridge")
+        self.start_button.clicked.connect(self.start_bridge)
+        actions_layout.addWidget(self.start_button)
 
-        self.refresh_button = ttk.Button(actions, text="Refresh Devices", command=self.refresh_devices)
-        self.refresh_button.pack(side=tk.LEFT)
+        self.stop_button = QtWidgets.QPushButton("Stop Bridge")
+        self.stop_button.setEnabled(False)
+        self.stop_button.clicked.connect(self.stop_bridge)
+        actions_layout.addWidget(self.stop_button)
 
-        ttk.Label(actions, textvariable=self.status_var).pack(side=tk.RIGHT)
+        self.refresh_button = QtWidgets.QPushButton("Refresh Devices")
+        self.refresh_button.clicked.connect(self.refresh_devices)
+        actions_layout.addWidget(self.refresh_button)
 
-        log_frame = ttk.LabelFrame(frame, text="Logs", padding=8)
-        log_frame.pack(fill=tk.BOTH, expand=True)
+        actions_layout.addStretch()
+        self.status_label = QtWidgets.QLabel("Stopped")
+        actions_layout.addWidget(self.status_label)
+        main_layout.addLayout(actions_layout)
 
-        self.log_box = tk.Text(log_frame, wrap=tk.WORD, height=20)
-        self.log_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.log_box.configure(state=tk.DISABLED)
-
-        scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_box.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.log_box.configure(yscrollcommand=scrollbar.set)
+        self.log_box = QtWidgets.QPlainTextEdit()
+        self.log_box.setReadOnly(True)
+        main_layout.addWidget(self.log_box)
 
         self.refresh_devices()
 
     def append_log(self, message):
-        self.log_box.configure(state=tk.NORMAL)
-        self.log_box.insert(tk.END, message + "\n")
-        self.log_box.see(tk.END)
-        self.log_box.configure(state=tk.DISABLED)
+        self.log_box.appendPlainText(message)
 
-    def _drain_log_queue(self):
+    def _drain_queues(self):
         while True:
             try:
                 message = self.log_queue.get_nowait()
             except queue.Empty:
                 break
             self.append_log(message)
-        self.root.after(100, self._drain_log_queue)
+
+        while True:
+            try:
+                event_type, payload = self.event_queue.get_nowait()
+            except queue.Empty:
+                break
+            if event_type == "devices":
+                self._update_device_selector(payload)
 
     def _read_and_validate_config(self):
-        name = self.name_var.get().strip() or "Serial2MIDI"
-        selected = self.selected_device_var.get().strip()
+        name = self.name_input.text().strip() or "Serial2MIDI"
+        selected = self.device_combo.currentText().strip()
         if selected not in self.device_options or self.device_options[selected] is None:
             raise ValueError("Please select a device")
         device_path = self.device_options[selected]
 
         try:
-            baud_rate = int(self.baud_rate_var.get().strip())
+            baud_rate = int(self.baud_rate_combo.currentText().strip())
         except ValueError:
             raise ValueError("Baud rate must be an integer")
 
@@ -537,15 +559,15 @@ class Serial2MidiGUI:
         self.bridge_thread = threading.Thread(target=runner, daemon=True)
         self.bridge_thread.start()
 
-        self.start_button.configure(state=tk.DISABLED)
-        self.stop_button.configure(state=tk.NORMAL)
-        self.status_var.set("Running")
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+        self.status_label.setText("Running")
         self.log_queue.put("Bridge started")
 
     def _set_stopped_state(self):
-        self.start_button.configure(state=tk.NORMAL)
-        self.stop_button.configure(state=tk.DISABLED)
-        self.status_var.set("Stopped")
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.status_label.setText("Stopped")
 
     def stop_bridge(self):
         if self.serial_to_midi is None:
@@ -566,40 +588,44 @@ class Serial2MidiGUI:
                 devices.append(port_info)
             return devices
 
-        def update_device_selector(devices):
-            auto_label = "Select a device"
-            previous_selection = self.selected_device_var.get().strip() or auto_label
-            options = {auto_label: None}
-            values = [auto_label]
-
-            for port_info in devices:
-                label = "{} | {}".format(port_info.device_path, port_info.usb_description or "Unknown USB device")
-                options[label] = port_info.device_path
-                values.append(label)
-
-            self.device_options = options
-            self.device_combo["values"] = values
-
-            if previous_selection in options:
-                self.selected_device_var.set(previous_selection)
-            else:
-                self.selected_device_var.set(auto_label)
-
-            self.log_queue.put("Found {} device(s)".format(len(devices)))
-            self._save_config()
-
         def runner():
             try:
                 self.log_queue.put("Refreshing device list...")
                 devices = asyncio.run(gather_devices())
-                self.root.after(0, lambda: update_device_selector(devices))
+                self.event_queue.put(("devices", devices))
             except Exception:
                 self.log_queue.put(traceback.format_exc())
 
         self.list_thread = threading.Thread(target=runner, daemon=True)
         self.list_thread.start()
 
+    def _update_device_selector(self, devices):
+        auto_label = "Select a device"
+        previous_selection = self.device_combo.currentText().strip() or self.selected_device_value or auto_label
+        options = {auto_label: None}
+        values = [auto_label]
+
+        for port_info in devices:
+            label = "{} | {}".format(port_info.device_path, port_info.usb_description or "Unknown USB device")
+            options[label] = port_info.device_path
+            values.append(label)
+
+        self.device_options = options
+        self.device_combo.clear()
+        self.device_combo.addItems(values)
+
+        if previous_selection in options:
+            self.device_combo.setCurrentText(previous_selection)
+        else:
+            self.device_combo.setCurrentText(auto_label)
+
+        self.log_queue.put("Found {} device(s)".format(len(devices)))
+        self._save_config()
+
     def on_close(self):
+        if self._closed:
+            return
+        self._closed = True
         self._save_config()
         if self.serial_to_midi is not None:
             self.serial_to_midi.stop()
@@ -607,10 +633,10 @@ class Serial2MidiGUI:
             LOG_HOOKS.remove(self.log_hook)
         except ValueError:
             pass
-        self.root.destroy()
 
     def run(self):
-        self.root.mainloop()
+        self.window.show()
+        self.app.exec()
 
 
 def write_crash_log(exc):
@@ -644,9 +670,14 @@ async def main():
         return 0
 
     if args.gui or not args.cli:
-        gui = Serial2MidiGUI()
-        gui.run()
-        return 0
+        try:
+            gui = Serial2MidiGUI()
+            gui.run()
+            return 0
+        except Exception as exc:
+            print("Could not start GUI mode:", exc)
+            print("Try running in CLI mode with --cli")
+            return 1
 
     if args.device_path is None:
         print("--device is required in --cli mode. Use --list to discover available devices.")
@@ -667,17 +698,4 @@ if __name__ == '__main__':
     except Exception as exc:
         crash_log = write_crash_log(exc)
         print("Fatal error. See crash log:", crash_log)
-        try:
-            from tkinter import messagebox
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showerror(
-                "Serial2MIDI",
-                "Serial2MIDI crashed.\n\n"
-                + "Crash log written to:\n"
-                + crash_log,
-            )
-            root.destroy()
-        except Exception:
-            pass
         raise

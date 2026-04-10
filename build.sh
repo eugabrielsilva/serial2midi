@@ -37,8 +37,8 @@ COMMON_ARGS=(
     --noconfirm
     --clean
     --name serial2midi
-    --hidden-import=tkinter
-    --hidden-import=_tkinter
+    --collect-all
+    PySide6
     --hidden-import=serial.tools.list_ports
     "${ROOT_DIR}/main.py"
 )

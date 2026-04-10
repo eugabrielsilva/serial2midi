@@ -114,7 +114,7 @@ options:
 
 ## GUI
 
-The project now also includes a graphical interface (Tkinter).
+The project now also includes a graphical interface (PySide6/Qt).
 
 Default behavior:
 - `python main.py` opens the GUI
