@@ -11,6 +11,7 @@ import os
 from enum import Enum
 import asyncio
 import queue
+import rtmidi
 
 MIDI_SYSEX = 0xF0
 MIDI_SYSEX_TYPE_NON_REALTIME = 0x7E
@@ -51,7 +52,6 @@ debug = logger(LogLevel.DEBUG)
 info = logger(LogLevel.INFO)
 verbose = logger(LogLevel.VERBOSE)
 
-# Small helper, see https://stackoverflow.com/questions/2352181/how-to-use-a-dot-to-access-members-of-dictionary
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
     __getattr__ = dict.get
@@ -62,10 +62,6 @@ class MidiError(Exception):
     pass
 
 def find_device_port_by_serial_attribute(serial_attribute):
-    #context = pyudev.Context()
-    #for device in context.list_devices().match_attribute("serial", "0000:00:1a.0"):
-    #    return device.device_node
-    #return ""
     for p in serial.tools.list_ports.comports():
         device_path = p.device
         context = pyudev.Context()
@@ -122,15 +118,7 @@ class Serial2Midi():
         
 
     async def run(self):
-        try:
-            import rtmidi
-        except Exception as exc:
-            raise RuntimeError(
-                "python-rtmidi could not be loaded. Rebuild the app in the target macOS environment."
-            ) from exc
-
         def safe_set_client_name(midi_client, name):
-            # Some backends (for example CoreMIDI) do not support changing client names.
             try:
                 midi_client.set_client_name(name)
             except NotImplementedError:
@@ -291,7 +279,6 @@ def sysexIdentityRequest(device, timeout=4):
 
         return identity
 
-    # We need to wait until the arduino is ready to read...
     start = time.time()
 
     while time.time() - start < 3.0:
